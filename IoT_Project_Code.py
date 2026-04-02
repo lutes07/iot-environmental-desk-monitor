@@ -1,8 +1,9 @@
 import os
 import time
 import ssl
-import busio
-import adafruit_us100
+import terminalio
+import displayio
+import adafruit_hcsr04
 import wifi
 import board
 import socketpool
@@ -10,6 +11,8 @@ import adafruit_requests
 import adafruit_ahtx0
 from analogio import AnalogIn
 from digitalio import DigitalInOut, Direction, Pull
+from adafruit_display_text import label
+from adafruit_st7789 import ST7789
 
 
 light_pin = AnalogIn(board.A0)
