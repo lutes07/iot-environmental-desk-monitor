@@ -14,11 +14,9 @@ from digitalio import DigitalInOut, Direction, Pull
 from adafruit_display_text import label
 from adafruit_st7789 import ST7789
 
-
 light_pin = AnalogIn(board.A0)
-uart = busio.UART(board.TX, board.RX, baudrate=9600)
-us100 = adafruit_us100.US100(uart)
 
+sonar = adafruit_hcsr04.HCSR04(trigger_pin=board.D10, echo_pin=board.D11)
 
 try:
     i2c = board.I2C()
@@ -28,11 +26,9 @@ except Exception:
     print("AHT20 Sensor: Not found (Check SDA/SCL)")
     aht20 = None
 
-
-button = DigitalInOut(board.D5)
+button = DigitalInOut(board.D12)
 button.direction = Direction.INPUT
 button.pull = Pull.UP
-
 
 print("--- CONNECTING TO WIFI ---")
 try:
@@ -41,28 +37,18 @@ try:
 except Exception as e:
     print(f"WiFi Connection Failed: {e}")
 
-
-# Setup Web Requests
 pool = socketpool.SocketPool(wifi.radio)
 requests = adafruit_requests.Session(pool, ssl.create_default_context())
 api_key = "RPNXYKFO02MLMNUK"
-
-
-#State Variables
-
 
 is_collecting = False
 last_upload_time = 0
 upload_interval = 300
 previous_button_state = button.value
 
-
-#Main Loop
-print("System Read. Waiting for button press...")
-
+print("System Ready. Waiting for button press...")
 
 while True:
-    #Check the Button
     current_button_state = button.value
     if current_button_state == False and previous_button_state == True:
         if is_collecting == False:
@@ -72,29 +58,30 @@ while True:
         elif is_collecting == True:
             is_collecting = False
             print("Collection Paused")
-        time.sleep(0.1)
+        time.sleep(0.2)
     previous_button_state = current_button_state
-    # Check the Clock
+
     if is_collecting == True:
         current_time = time.monotonic()
-
 
         if(current_time - last_upload_time) >= upload_interval:
             print("5 minutes have passed! Sending data...")
             light_mv = (light_pin.value * 3300) / 65535
-            distance = us100.distance
-
-
-            if distance is not None:
+            
+            try:
+                distance = sonar.distance
                 print(f"Distance:    {distance:.1f} cm")
-            else:
+            except RuntimeError:
+                distance = 0
                 print("Distance:    Out of range")
+
             if aht20:
                 temp_f = (aht20.temperature * 9 / 5) + 32
                 humidity = aht20.relative_humidity
             else:
                 temp_f = 0
                 humidity = 0
+
             mac_addr = ':'.join(['{:02X}'.format(i) for i in wifi.radio.mac_address])
             print("-" * 30)
             print(f"MAC Address: {mac_addr}")
@@ -104,12 +91,7 @@ while True:
             print(f"Humidity:    {humidity:.1f} %")
             print("-" * 30)
 
-
-            # Using a single-line URL to prevent syntax errors
-
-
-            update_url = f"https://api.thingspeak.com/update?api_key={api_key}&field1={light_mv:.1f}&field2={temp_f:.1f}&field3={humidity:.1f}"
-
+            update_url = f"https://api.thingspeak.com/update?api_key={api_key}&field1={light_mv:.1f}&field2={temp_f:.1f}&field3={humidity:.1f}&field4={distance:.1f}"
 
             print("Updating ThingSpeak...")
             try:
@@ -119,9 +101,7 @@ while True:
             except Exception as e:
                 print(f"Failed to update ThingSpeak: {e}")
 
-
             print("Done!")
-           
             last_upload_time = current_time
-   
+    
     time.sleep(0.05)
